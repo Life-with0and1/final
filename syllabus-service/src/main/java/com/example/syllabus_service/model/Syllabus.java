@@ -6,13 +6,16 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.io.Serializable;
 import java.util.List;
 
 @Document(collection = "syllabus")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Syllabus {
+public class Syllabus implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
     private String id;

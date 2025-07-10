@@ -5,6 +5,8 @@ import com.example.syllabus_service.model.Syllabus;
 import com.example.syllabus_service.model.Tag;
 import com.example.syllabus_service.repository.SyllabusRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -44,6 +46,7 @@ public class SyllabusService {
     }
 
     // Update Syllabus
+    @CacheEvict(value = {"syllabusCache", "tagsCache"}, key = "#id")
     public Syllabus updateSyllabus(String id, Syllabus syllabus) {
         Optional<Syllabus> existing = syllabusRepository.findById(id);
         if (existing.isEmpty()) {
@@ -52,16 +55,20 @@ public class SyllabusService {
         Syllabus existingSyllabus = existing.get();
         List<String> oldTags = existingSyllabus.getTags();
         List<String> newTags = syllabus.getTags();
+
+        // Remove id from old tags that are no longer present
         for (String oldTagName : oldTags) {
             if (!newTags.contains(oldTagName)) {
                 try {
                     Tag tag = tagClient.getTagByName(oldTagName);
                     tag.getSyllabusIds().remove(id);
-                    if(tag.getSyllabusIds().size()==0) tagClient.deleteTagByName(oldTagName);
+                    if (tag.getSyllabusIds().isEmpty()) tagClient.deleteTagByName(oldTagName);
                     else tagClient.saveTag(tag);
-                } catch (Exception e) {}
+                } catch (Exception ignored) {}
             }
         }
+
+        // Add id to new tags if not present
         for (String newTagName : newTags) {
             Tag tag;
             try {
@@ -76,6 +83,7 @@ public class SyllabusService {
             }
             tagClient.saveTag(tag);
         }
+
         existingSyllabus.setSubject(syllabus.getSubject());
         existingSyllabus.setDescription(syllabus.getDescription());
         existingSyllabus.setTopics(syllabus.getTopics());
@@ -86,17 +94,19 @@ public class SyllabusService {
     }
 
     // Delete Syllabus
+    @CacheEvict(value = {"syllabusCache", "tagsCache"}, key = "#id")
     public String deleteSyllabus(String id) {
         Optional<Syllabus> existing = syllabusRepository.findById(id);
         if (existing.isEmpty()) {
             throw new IllegalArgumentException("Syllabus not found with ID: " + id);
         }
         Syllabus syllabus = existing.get();
+
         for (String tagName : syllabus.getTags()) {
             try {
                 Tag tag = tagClient.getTagByName(tagName);
                 tag.getSyllabusIds().remove(id);
-                if(tag.getSyllabusIds().size()==0) tagClient.deleteTagByName(tag.getName());
+                if (tag.getSyllabusIds().isEmpty()) tagClient.deleteTagByName(tag.getName());
                 else tagClient.saveTag(tag);
             } catch (Exception ignored) {}
         }
@@ -106,11 +116,13 @@ public class SyllabusService {
     }
 
     // Get Syllabus By Id
+    @Cacheable(value = "syllabusCache", key = "#id")
     public Optional<Syllabus> getSyllabusById(String id) {
         return syllabusRepository.findById(id);
     }
 
     // Get Tag Names By Syllabus Id
+    @Cacheable(value = "tagsCache", key = "#id")
     public List<String> getTagsBySyllabusId(String id) {
         Optional<Syllabus> existing = syllabusRepository.findById(id);
         if (existing.isEmpty()) {
